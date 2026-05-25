@@ -41,9 +41,11 @@ from langchain_text_splitters import (
 # Load environment variables
 load_dotenv()
 
-os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN")
+# Load API keys
+groq_api_key = os.environ.get("GROQ_API_KEY")
+os.environ["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
 
-# Streamlit page configuration
+# Streamlit page config
 st.set_page_config(
     page_title="Conversational PDF RAG",
     page_icon="📚",
@@ -56,20 +58,14 @@ st.write("Upload PDF files and chat with their content.")
 
 # Sidebar
 with st.sidebar:
-
     st.header("Settings")
-
-    groq_api_key = st.text_input(
-        "Enter Groq API Key",
-        type="password"
-    )
 
     session_id = st.text_input(
         "Session ID",
         value="default_session"
     )
 
-# Session state initialization
+# Session state
 if "store" not in st.session_state:
     st.session_state.store = {}
 
@@ -81,13 +77,14 @@ embeddings = HuggingFaceEmbeddings(
     model_name="all-MiniLM-L6-v2"
 )
 
-# Main application
+# Run app if API key exists
 if groq_api_key:
 
-    # Initialize LLM
+    # Initialize Groq LLM
     llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
         groq_api_key=groq_api_key,
-        model_name="llama-3.3-70b-versatile"
+        temperature=0.3
     )
 
     # Upload PDFs
@@ -106,6 +103,7 @@ if groq_api_key:
 
             for uploaded_file in uploaded_files:
 
+                # Save uploaded pdf temporarily
                 with tempfile.NamedTemporaryFile(
                     delete=False,
                     suffix=".pdf"
@@ -114,8 +112,8 @@ if groq_api_key:
                     temp_file.write(uploaded_file.read())
                     temp_pdf_path = temp_file.name
 
+                # Load pdf
                 loader = PyPDFLoader(temp_pdf_path)
-
                 docs = loader.load()
 
                 documents.extend(docs)
@@ -138,12 +136,18 @@ if groq_api_key:
 
         retriever = vectorstore.as_retriever()
 
-        # Contextualization system prompt
+        # Query reformulation prompt
         contextualize_q_system_prompt = """
-        Given the chat history and latest user question,
-        formulate a standalone question.
+        You are an expert query reformulator.
 
-        Do not answer the question.
+        Your job is to analyze the chat history and latest user question
+        to create a standalone search query.
+
+        Rules:
+        1. Do not answer the question.
+        2. Do not add explanations.
+        3. Output only the standalone question.
+        4. If no history is needed, return the question as it is.
         """
 
         # Contextualization prompt
@@ -164,12 +168,15 @@ if groq_api_key:
 
         # QA system prompt
         system_prompt = """
-        You are a helpful assistant.
+        You are an expert assistant for document question answering.
 
-        Use the retrieved context to answer the question.
+        Answer the question only from the provided context.
 
-        If the answer is not available,
-        say you do not know.
+        Rules:
+        1. Do not hallucinate.
+        2. If information is unavailable, clearly say so.
+        3. Keep answers clear and structured.
+        4. Use markdown formatting when useful.
 
         Context:
         {context}
@@ -184,7 +191,7 @@ if groq_api_key:
             ]
         )
 
-        # Question answering chain
+        # QA chain
         question_answer_chain = create_stuff_documents_chain(
             llm,
             qa_prompt
@@ -196,18 +203,17 @@ if groq_api_key:
             question_answer_chain
         )
 
-        # Session history function
+        # Session history
         def get_session_history(
             session: str
         ) -> BaseChatMessageHistory:
 
             if session not in st.session_state.store:
-
                 st.session_state.store[session] = ChatMessageHistory()
 
             return st.session_state.store[session]
 
-        # Conversational RAG chain
+        # Conversational chain
         conversational_rag_chain = RunnableWithMessageHistory(
             rag_chain,
             get_session_history,
@@ -223,14 +229,13 @@ if groq_api_key:
             "Ask a question about your PDFs..."
         )
 
-        # Display previous chat messages
+        # Display previous messages
         for message in st.session_state.messages:
 
             with st.chat_message(message["role"]):
-
                 st.markdown(message["content"])
 
-        # Process user query
+        # Process query
         if user_input:
 
             st.session_state.messages.append(
@@ -241,25 +246,28 @@ if groq_api_key:
             )
 
             with st.chat_message("user"):
-
                 st.markdown(user_input)
 
             with st.chat_message("assistant"):
 
-                with st.spinner("Thinking..."):
+                # Stream response tokens
+                def response_generator():
 
-                    response = conversational_rag_chain.invoke(
+                    for chunk in conversational_rag_chain.stream(
                         {"input": user_input},
                         config={
                             "configurable": {
                                 "session_id": session_id
                             }
                         }
-                    )
+                    ):
 
-                    answer = response["answer"]
+                        if "answer" in chunk:
+                            yield chunk["answer"]
 
-                    st.markdown(answer)
+                answer = st.write_stream(
+                    response_generator
+                )
 
             st.session_state.messages.append(
                 {
@@ -268,9 +276,9 @@ if groq_api_key:
                 }
             )
 
-# Warning message
+# Show error if key missing
 else:
 
-    st.warning(
-        "Please enter your Groq API Key."
+    st.error(
+        "Missing API Key Configuration. Please add GROQ_API_KEY in environment variables."
     )

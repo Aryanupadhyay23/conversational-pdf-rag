@@ -1,134 +1,133 @@
 # Conversational PDF RAG Chatbot
 
-Live Demo: https://huggingface.co/spaces/Aryan2301/Conversational_PDF_RAG
+**Live Demo:** [Hugging Face Spaces: Conversational_PDF_RAG](https://huggingface.co/spaces/Aryan2301/Conversational_PDF_RAG)
 
-A conversational Retrieval Augmented Generation (RAG) application built using Streamlit, LangChain, Groq, ChromaDB, and HuggingFace embeddings. The application allows users to upload multiple PDF files and interact with their content through a conversational interface.
+An end-to-end Conversational Retrieval-Augmented Generation (RAG) application built using Streamlit, LangChain, Groq, ChromaDB, and Hugging Face embeddings. This application allows users to upload multiple PDF documents and interact with them through a conversational AI interface with contextual memory and history-aware retrieval.
 
-The chatbot maintains chat history and understands follow-up questions using contextual retrieval.
+The chatbot intelligently maintains chat history and reformulates follow-up questions using contextual retrieval to ensure accurate, context-aware answers.
+
+---
 
 ## Features
 
-- Multiple PDF upload support
-- Conversational chat interface
-- Chat history memory
-- Retrieval Augmented Generation (RAG)
-- Context aware follow-up question handling
-- ChromaDB vector storage
-- HuggingFace embeddings
-- Groq LLM integration
-- Streamlit based interface
+* **Multiple PDF Uploads:** Process and query several documents simultaneously via a temporary PDF processing pipeline.
+* **Conversational Interface with Streaming:** Real-time, typewriter-effect responses via LangChain's streaming capabilities.
+* **Session-Based Memory:** Manage different conversations effortlessly using customizable Session IDs.
+* **Advanced RAG Pipeline:** Context-aware follow-up question handling and standalone query reformulation.
+* **High-Performance LLM:** Powered by Groq's `llama-3.3-70b-versatile` model.
+* **Robust Embeddings & Storage:** Utilizes Hugging Face's `all-MiniLM-L6-v2` embeddings stored locally in ChromaDB.
+* **Docker Ready:** Fully containerized for quick and consistent deployments.
+
+---
 
 ## Tech Stack
 
-- Python
-- Streamlit
-- LangChain
-- Groq
-- ChromaDB
-- HuggingFace Embeddings
-- Sentence Transformers
+* **Backend & Frameworks:** Python, Streamlit, LangChain (`langchain-core`, `langchain-classic`, `langchain-community`)
+* **LLM Provider:** Groq
+* **Vector Database:** ChromaDB
+* **Embeddings:** Hugging Face / Sentence Transformers (`all-MiniLM-L6-v2`)
+* **Document Processing:** PyPDFLoader, RecursiveCharacterTextSplitter
 
-## Workflow
+---
 
-1. Upload one or more PDF files
-2. Extract and split document text into chunks
-3. Generate embeddings for document chunks
-4. Store embeddings in ChromaDB
-5. Retrieve relevant chunks based on user query
-6. Generate contextual responses using LLM
+## Application Workflow
 
-The application also reformulates follow-up questions into standalone questions before retrieval to improve retrieval accuracy.
+1. **Ingestion:** Upload one or more PDF files.
+2. **Extraction:** Extract document text.
+3. **Processing:** Split text into manageable chunks (chunk_size = 5000, chunk_overlap = 500).
+4. **Embedding:** Generate embeddings for text chunks.
+5. **Storage:** Store embeddings in ChromaDB.
+6. **Query Reformulation:** When a follow-up question is asked, the system uses the chat history to reformulate it into a standalone search query.
+    * *Example User Input:* "What is CNN?" -> "How does it work?"
+    * *Internally Reformulated Query:* "How does Convolutional Neural Network (CNN) work?"
+7. **Retrieval:** Retrieve relevant chunks from the vector database.
+8. **Generation:** Generate contextual response using the Groq LLM and maintain conversational memory.
 
-Example:
+---
 
-```text id="a8s3d7"
-User: What is CNN?
-User: How does it work?
-```
+## Getting Started
 
-Converted internally into:
+### Prerequisites
 
-```text id="r4t7m2"
-How does Convolutional Neural Network (CNN) work?
-```
+* Python 3.11+
+* [Groq API Key](https://console.groq.com/keys)
+* [Hugging Face Token](https://huggingface.co/settings/tokens)
 
-## Installation
+### 1. Clone the Repository
 
-Clone the repository:
+    git clone <your_repo_url>
+    cd conversational-pdf-rag
 
-```bash id="m6x2k9"
-git clone <your_repo_url>
-```
+### 2. Set Up Environment Variables
 
-Move into the project directory:
+Create a `.env` file in the root directory and add your API keys:
 
-```bash id="q2n8p5"
-cd conversational-pdf-rag
-```
+    GROQ_API_KEY=your_groq_api_key
+    HF_TOKEN=your_huggingface_token
 
-Install dependencies:
+---
 
-```bash id="f7v3w1"
-pip install -r requirements.txt
-```
+### Option A: Local Installation
 
-## Environment Variables
+1. **Install dependencies:**
 
-Create a `.env` file in the root directory:
+        pip install -r requirements.txt
 
-```env id="u5y1b4"
-HF_TOKEN=your_huggingface_token
-```
+2. **Run the application:**
 
-The Groq API key is entered directly through the application UI.
+        streamlit run app.py
 
-## Run the Application
+   The application will start locally on `http://localhost:8501`.
 
-```bash id="e3r8c6"
-streamlit run app.py
-```
+### Option B: Docker Deployment
 
-## Requirements
+1. **Build the Docker image:**
 
-```txt id="x4m1v8"
-streamlit==1.57.0
-python-dotenv==1.2.2
+        docker build -t conversational-pdf-rag .
 
-langchain==1.2.18
-langchain-core==1.3.3
-langchain-community==0.4.1
-langchain-classic==1.0.7
+2. **Run the Docker container:**
+   *(Ensure your `.env` file is in the same directory, or pass variables directly)*
 
-langchain-groq==1.1.2
-langchain-chroma==1.1.0
-langchain-huggingface==1.2.2
+        docker run -p 8501:8501 --env-file .env conversational-pdf-rag
 
-chromadb==1.5.9
-pypdf==6.11.0
-sentence-transformers==5.4.1
-
-huggingface_hub==1.14.0
-groq==0.37.1
-```
+---
 
 ## Project Structure
 
-```text id="k9t4p2"
-│── app.py
-│── requirements.txt
-│── Dockerfile
-│── .env
-│── README.md
-```
+    conversational-pdf-rag/
+    │
+    ├── app.py               # Main Streamlit application and RAG pipeline
+    ├── requirements.txt     # Python dependencies
+    ├── Dockerfile           # Docker configuration for containerization
+    ├── .env                 # Environment variables (API keys)
+    ├── .gitignore           # Git ignore rules
+    └── README.md            # Project documentation
+
+---
+
+## Example Use Cases
+
+* Research paper Q&A
+* Technical documentation assistant
+* Educational PDF chatbot
+* Resume/document analysis
+* Multi-document conversational search
+* Notes and ebook interaction
+
+---
 
 ## Future Improvements
 
-- Persistent vector database
-- Authentication system
-- Streaming responses
-- Source citations
-- PDF page references
-- Redis based memory
-- Hybrid search
-- Docker deployment
+* Persistent vector database storage
+* Source citations with page numbers
+* Hybrid search (BM25 + Vector Search)
+* Authentication system
+* Cloud deployment support
+* File management dashboard
+* Multi-user support
 
+---
+
+## License
+
+This project is open-source and available under the MIT License.
