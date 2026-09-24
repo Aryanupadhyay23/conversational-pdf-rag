@@ -10,6 +10,7 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 
 ## Key Features
 
+* **Decoupled Architecture:** A lightweight Streamlit frontend client seamlessly streams Server-Sent Events (SSE) from a high-performance FastAPI backend.
 * **Self-RAG Architecture with LangGraph:** Autonomous state graph workflow featuring self-reflection, hallucination detection, and query transformation loops.
 * **Hybrid Retrieval (BM25 + Semantic Chroma):** Combines lexical keyword matching (BM25) and dense vector search (Chroma) fused via LangChain's native `EnsembleRetriever` using Reciprocal Rank Fusion (RRF).
 * **Fully Asynchronous Execution:** Entire graph is implemented with non-blocking async nodes (`ainvoke`) and concurrent evaluations (`asyncio.gather`) for parallel document grading and simultaneous hallucination/relevance verification.
@@ -31,6 +32,7 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 ## Tech Stack
 
 * **Orchestration & Workflow:** [LangGraph](https://github.com/langchain-ai/langgraph), [LangChain Core](https://github.com/langchain-ai/langchain)
+* **Backend API:** FastAPI, Uvicorn
 * **Frontend:** Streamlit
 * **LLM Provider:** Groq
 * **Hybrid Retrieval:** BM25 (`rank_bm25`), ChromaDB (`langchain-chroma`), LangChain `EnsembleRetriever`
@@ -119,13 +121,19 @@ LANGCHAIN_PROJECT="PDF_RAG_CHATBOT"
    pip install -r requirements.txt
    ```
 
-2. **Run the application:**
+2. **Start the FastAPI Backend (Terminal 1):**
+
+   ```bash
+   uvicorn api:app --reload --port 8000
+   ```
+
+3. **Start the Streamlit Frontend (Terminal 2):**
 
    ```bash
    streamlit run app.py
    ```
 
-   The application will start locally on `http://localhost:8501`.
+   The application will start locally on `http://localhost:8501` and connect to the backend API.
 
 ### Option B: Docker Deployment
 
@@ -138,7 +146,7 @@ LANGCHAIN_PROJECT="PDF_RAG_CHATBOT"
 2. **Run the Docker container:**
 
    ```bash
-   docker run -p 8501:8501 --env-file .env conversational-pdf-self-rag
+   docker run -p 8000:8000 -p 8501:8501 --env-file .env conversational-pdf-self-rag
    ```
 
 ---

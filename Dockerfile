@@ -22,12 +22,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
-# Expose Streamlit port
-EXPOSE 8501
+# Expose FastAPI and Streamlit ports
+EXPOSE 8000 8501
 
 # Streamlit configuration
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
-# Run Streamlit app
-CMD ["streamlit", "run", "app.py"]
+# Start both FastAPI backend and Streamlit frontend
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port 8000 & streamlit run app.py"]
