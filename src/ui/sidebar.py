@@ -1,8 +1,6 @@
 import streamlit as st
 from src.config import GEMINI_EMBEDDING_MODEL, EMBEDDING_DIMENSION
-from src.core.service import RagService
-
-def render_sidebar(rag_service: RagService) -> str:
+def render_sidebar() -> str:
     """
     Render sidebar configuration controls, session switcher, and architecture summaries.
     
@@ -44,7 +42,6 @@ def render_sidebar(rag_service: RagService) -> str:
         if st.button("Clear Conversation Memory", use_container_width=True):
             if "messages_by_session" in st.session_state and session_id in st.session_state.messages_by_session:
                 st.session_state.messages_by_session[session_id] = []
-            rag_service.clear_memory()
             st.success("Memory cleared for this session!")
             st.rerun()
 
