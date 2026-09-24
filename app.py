@@ -1,284 +1,115 @@
-import os
-import tempfile
 import streamlit as st
 
-from dotenv import load_dotenv
+from src.config import GROQ_API_KEY, GOOGLE_API_KEY
+from src.utils.helpers import compute_files_hash
+from src.ingestion import ingest_documents
+from src.core import RagService
+from src.ui import render_sidebar, render_chat_history, render_message_turn
 
-from langchain_chroma import Chroma
-from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
-
-from langchain_classic.chains import (
-    create_history_aware_retriever,
-    create_retrieval_chain
-)
-
-from langchain_classic.chains.combine_documents import (
-    create_stuff_documents_chain
-)
-
-from langchain_core.chat_history import BaseChatMessageHistory
-
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    MessagesPlaceholder
-)
-
-from langchain_core.runnables.history import RunnableWithMessageHistory
-
-from langchain_community.chat_message_histories import (
-    ChatMessageHistory
-)
-
-from langchain_community.document_loaders import (
-    PyPDFLoader
-)
-
-from langchain_text_splitters import (
-    RecursiveCharacterTextSplitter
-)
-
-# Load environment variables
-load_dotenv()
-
-# Load API keys
-groq_api_key = os.environ.get("GROQ_API_KEY")
-os.environ["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
-
-# Streamlit page config
+# ---------------------------------------------------------
+# Page Setup & Validation
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Conversational PDF RAG",
-    page_icon="📚",
+    page_title="Conversational PDF Self-RAG",
     layout="wide"
 )
 
-# App title
-st.title("📚 Conversational PDF RAG")
-st.write("Upload PDF files and chat with their content.")
+st.title("Conversational PDF Self-RAG Chatbot")
+st.caption("Modular asynchronous architecture with LangGraph Memory Checkpointer, Groq LLM, and Self-RAG")
 
-# Sidebar
-with st.sidebar:
-    st.header("Settings")
+if not GROQ_API_KEY:
+    st.error("Missing Groq API Key. Please set GROQ_API_KEY in your .env file.")
+    st.stop()
 
-    session_id = st.text_input(
-        "Session ID",
-        value="default_session"
-    )
+if not GOOGLE_API_KEY:
+    st.warning("Missing Google API Key. Please set GOOGLE_API_KEY in your .env file for native Google Gemini Embeddings.")
 
-# Session state
-if "store" not in st.session_state:
-    st.session_state.store = {}
+# ---------------------------------------------------------
+# State & Service Initialization
+# ---------------------------------------------------------
+if "rag_service" not in st.session_state:
+    st.session_state.rag_service = RagService()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "messages_by_session" not in st.session_state:
+    st.session_state.messages_by_session = {}
 
-# Embedding model
-embeddings = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2"
+if "uploaded_hash" not in st.session_state:
+    st.session_state.uploaded_hash = None
+
+rag_service: RagService = st.session_state.rag_service
+
+# Render sidebar controls & get active session ID
+session_id = render_sidebar(rag_service)
+
+if session_id not in st.session_state.messages_by_session:
+    st.session_state.messages_by_session[session_id] = []
+
+session_messages = st.session_state.messages_by_session[session_id]
+
+# ---------------------------------------------------------
+# PDF Upload & Ingestion Pipeline
+# ---------------------------------------------------------
+uploaded_files = st.file_uploader(
+    "Upload PDF Documents",
+    type=["pdf"],
+    accept_multiple_files=True,
+    help="Upload one or multiple PDF documents to chat with."
 )
 
-# Run app if API key exists
-if groq_api_key:
+if uploaded_files:
+    current_hash = compute_files_hash(uploaded_files)
+    if st.session_state.uploaded_hash != current_hash:
+        with st.spinner("Ingesting and indexing PDF documents..."):
+            retriever, chunk_count = ingest_documents(uploaded_files)
+            rag_service.set_retriever(retriever)
+            st.session_state.uploaded_hash = current_hash
+            st.success(f"Processed {len(uploaded_files)} PDF(s) into {chunk_count} indexed chunks.")
 
-    # Initialize Groq LLM
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        groq_api_key=groq_api_key,
-        temperature=0.3
-    )
+st.divider()
 
-    # Upload PDFs
-    uploaded_files = st.file_uploader(
-        "Upload PDF Files",
-        type="pdf",
-        accept_multiple_files=True
-    )
+# ---------------------------------------------------------
+# Conversation View & Query Execution
+# ---------------------------------------------------------
+render_chat_history(session_messages)
 
-    # Process PDFs
-    if uploaded_files:
+user_query = st.chat_input("Ask a question about your PDF documents...")
 
-        documents = []
+if user_query:
+    if not rag_service.is_ready():
+        st.warning("Please upload at least one PDF document before asking questions.")
+    else:
+        # Append and display user turn
+        session_messages.append({"role": "user", "content": user_query})
+        render_message_turn(role="user", content=user_query)
 
-        with st.spinner("Processing PDFs..."):
+        # Execute query via RagService
+        with st.chat_message("assistant"):
+            status_container = st.status("Self-RAG Agent Reflecting...", expanded=True)
+            status_container.write("Invoking Async Self-RAG Graph with Conversation Memory...")
 
-            for uploaded_file in uploaded_files:
+            try:
+                result = rag_service.execute_query(user_query, session_id=session_id)
 
-                # Save uploaded pdf temporarily
-                with tempfile.NamedTemporaryFile(
-                    delete=False,
-                    suffix=".pdf"
-                ) as temp_file:
+                for log_entry in result.reflection_logs:
+                    status_container.markdown(log_entry)
+                status_container.update(label="Self-RAG Reflection Complete", state="complete", expanded=False)
 
-                    temp_file.write(uploaded_file.read())
-                    temp_pdf_path = temp_file.name
+                st.markdown(result.answer)
 
-                # Load pdf
-                loader = PyPDFLoader(temp_pdf_path)
-                docs = loader.load()
+                if result.sources:
+                    with st.expander("Retrieved Source Passages", expanded=False):
+                        for s in result.sources:
+                            st.markdown(f"**{s['source']} (Page {s['page']})**")
+                            st.markdown(f"> {s['snippet']}")
 
-                documents.extend(docs)
-
-        st.success("PDFs processed successfully!")
-
-        # Split documents
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=5000,
-            chunk_overlap=500
-        )
-
-        splits = text_splitter.split_documents(documents)
-
-        # Create vector database
-        vectorstore = Chroma.from_documents(
-            documents=splits,
-            embedding=embeddings
-        )
-
-        retriever = vectorstore.as_retriever()
-
-        # Query reformulation prompt
-        contextualize_q_system_prompt = """
-        You are an expert query reformulator.
-
-        Your job is to analyze the chat history and latest user question
-        to create a standalone search query.
-
-        Rules:
-        1. Do not answer the question.
-        2. Do not add explanations.
-        3. Output only the standalone question.
-        4. If no history is needed, return the question as it is.
-        """
-
-        # Contextualization prompt
-        contextualize_q_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", contextualize_q_system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}")
-            ]
-        )
-
-        # History aware retriever
-        history_aware_retriever = create_history_aware_retriever(
-            llm,
-            retriever,
-            contextualize_q_prompt
-        )
-
-        # QA system prompt
-        system_prompt = """
-        You are an expert assistant for document question answering.
-
-        Answer the question only from the provided context.
-
-        Rules:
-        1. Do not hallucinate.
-        2. If information is unavailable, clearly say so.
-        3. Keep answers clear and structured.
-        4. Use markdown formatting when useful.
-
-        Context:
-        {context}
-        """
-
-        # QA prompt
-        qa_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}")
-            ]
-        )
-
-        # QA chain
-        question_answer_chain = create_stuff_documents_chain(
-            llm,
-            qa_prompt
-        )
-
-        # Retrieval chain
-        rag_chain = create_retrieval_chain(
-            history_aware_retriever,
-            question_answer_chain
-        )
-
-        # Session history
-        def get_session_history(
-            session: str
-        ) -> BaseChatMessageHistory:
-
-            if session not in st.session_state.store:
-                st.session_state.store[session] = ChatMessageHistory()
-
-            return st.session_state.store[session]
-
-        # Conversational chain
-        conversational_rag_chain = RunnableWithMessageHistory(
-            rag_chain,
-            get_session_history,
-            input_messages_key="input",
-            history_messages_key="chat_history",
-            output_messages_key="answer"
-        )
-
-        st.divider()
-
-        # User input
-        user_input = st.chat_input(
-            "Ask a question about your PDFs..."
-        )
-
-        # Display previous messages
-        for message in st.session_state.messages:
-
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-        # Process query
-        if user_input:
-
-            st.session_state.messages.append(
-                {
-                    "role": "user",
-                    "content": user_input
-                }
-            )
-
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            with st.chat_message("assistant"):
-
-                # Stream response tokens
-                def response_generator():
-
-                    for chunk in conversational_rag_chain.stream(
-                        {"input": user_input},
-                        config={
-                            "configurable": {
-                                "session_id": session_id
-                            }
-                        }
-                    ):
-
-                        if "answer" in chunk:
-                            yield chunk["answer"]
-
-                answer = st.write_stream(
-                    response_generator
-                )
-
-            st.session_state.messages.append(
-                {
+                # Persist assistant turn in session
+                session_messages.append({
                     "role": "assistant",
-                    "content": answer
-                }
-            )
+                    "content": result.answer,
+                    "reflections": result.reflection_logs,
+                    "sources": result.sources
+                })
 
-# Show error if key missing
-else:
-
-    st.error(
-        "Missing API Key Configuration. Please add GROQ_API_KEY in environment variables."
-    )
+            except Exception as e:
+                status_container.update(label="Self-RAG Error", state="error", expanded=True)
+                st.error(f"Error during Self-RAG execution: {str(e)}")
