@@ -22,7 +22,4 @@ chromadb
 rank-bm25
 
 # PDF Processing
-unstructured
-pdfminer.six
-python-magic
-nltk
+pypdf

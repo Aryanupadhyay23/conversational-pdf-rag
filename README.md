@@ -46,7 +46,7 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 * **LLM Provider:** Groq
 * **Hybrid Retrieval:** BM25 (`rank_bm25`), ChromaDB (`langchain-chroma`), LangChain `EnsembleRetriever`
 * **Embeddings:** Google Gemini Embeddings (`gemini-embedding-2`, 768 dimensions via `langchain-google-genai`)
-* **Document Processing:** Unstructured (`UnstructuredPDFLoader`), RecursiveCharacterTextSplitter (with UUID chunk deduplication)
+* **Document Processing:** `pypdf` (`PyPDFLoader`), RecursiveCharacterTextSplitter (with UUID chunk deduplication)
 * **Observability:** LangSmith
 
 ---

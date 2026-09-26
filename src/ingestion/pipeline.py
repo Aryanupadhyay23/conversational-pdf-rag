@@ -8,8 +8,8 @@ from src.ingestion.retriever import build_hybrid_retriever
 def ingest_documents(uploaded_files: Sequence) -> Tuple[BaseRetriever, int]:
     """
     End-to-end ingestion pipeline:
-    1. Loads PDF bytes with UnstructuredPDFLoader (mode="elements").
-    2. Splits structured elements with RecursiveCharacterTextSplitter while carrying metadata forward.
+    1. Loads PDF bytes with PyPDFLoader / pypdf.
+    2. Splits pages with RecursiveCharacterTextSplitter while carrying metadata forward.
     3. Builds the hybrid EnsembleRetriever (BM25 + Chroma Semantic).
 
     Returns:
