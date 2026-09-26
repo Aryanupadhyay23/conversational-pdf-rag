@@ -1,15 +1,11 @@
 import streamlit as st
-import requests
-import json
-import uuid
 import os
 
 from src.config import GROQ_API_KEY, GOOGLE_API_KEY
 from src.utils.helpers import compute_files_hash
 from src.ui import render_chat_history, render_message_turn
-
-# FastAPI Backend Configuration
-API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
+from src.core.service import RagService
+from src.ingestion.pipeline import ingest_documents
 
 # ---------------------------------------------------------
 # Page Setup & Validation
@@ -20,7 +16,7 @@ st.set_page_config(
 )
 
 st.title("Conversational PDF Self-RAG Chatbot")
-st.caption("Streaming FastAPI Backend + Streamlit Frontend")
+st.caption("Powered by LangGraph + Groq + ChromaDB")
 
 if not GROQ_API_KEY:
     st.error("Missing Groq API Key. Please set GROQ_API_KEY in your .env file.")
@@ -41,7 +37,9 @@ if "uploaded_hash" not in st.session_state:
 if "is_ready" not in st.session_state:
     st.session_state.is_ready = False
 
-# Use a default session ID since the sidebar is removed
+if "rag_service" not in st.session_state:
+    st.session_state.rag_service = RagService()
+
 session_id = "default_session"
 
 if session_id not in st.session_state.messages_by_session:
@@ -50,7 +48,7 @@ if session_id not in st.session_state.messages_by_session:
 session_messages = st.session_state.messages_by_session[session_id]
 
 # ---------------------------------------------------------
-# PDF Upload & Ingestion Pipeline (via FastAPI)
+# PDF Upload & Ingestion Pipeline (Direct)
 # ---------------------------------------------------------
 uploaded_files = st.file_uploader(
     "Upload PDF Documents",
@@ -62,26 +60,20 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     current_hash = compute_files_hash(uploaded_files)
     if st.session_state.uploaded_hash != current_hash:
-        with st.spinner("Uploading and indexing PDFs on backend server..."):
+        with st.spinner("Uploading and indexing PDFs..."):
             try:
-                # Prepare files for multipart/form-data upload
-                files_payload = [
-                    ("files", (f.name, f.read(), "application/pdf")) for f in uploaded_files
-                ]
-                
-                response = requests.post(f"{API_URL}/upload", files=files_payload)
-                response.raise_for_status()
-                
+                retriever, chunk_count = ingest_documents(uploaded_files)
+                st.session_state.rag_service.set_retriever(retriever)
                 st.session_state.is_ready = True
                 st.session_state.uploaded_hash = current_hash
-                st.success(f"Processed {len(uploaded_files)} PDF(s) into {response.json().get('chunks_indexed', 0)} indexed chunks.")
+                st.success(f"Processed {len(uploaded_files)} PDF(s) into {chunk_count} indexed chunks.")
             except Exception as e:
-                st.error(f"Failed to connect to FastAPI backend: {str(e)}")
+                st.error(f"Failed to process PDFs: {str(e)}")
 
 st.divider()
 
 # ---------------------------------------------------------
-# Conversation View & Query Execution (via SSE Streaming)
+# Conversation View & Query Execution (Direct)
 # ---------------------------------------------------------
 render_chat_history(session_messages)
 
@@ -95,65 +87,37 @@ if user_query:
         session_messages.append({"role": "user", "content": user_query})
         render_message_turn(role="user", content=user_query)
 
-        # Execute query via FastAPI Streaming Endpoint
+        # Execute query directly via RagService
         with st.chat_message("assistant"):
             try:
-                # Connect to FastAPI SSE stream
-                response = requests.post(
-                    f"{API_URL}/chat/stream",
-                    data={"query": user_query, "session_id": session_id},
-                    stream=True
-                )
-                response.raise_for_status()
+                with st.spinner("Thinking..."):
+                    result = st.session_state.rag_service.execute_query(
+                        user_query=user_query,
+                        session_id=session_id
+                    )
 
-                answer_placeholder = st.empty()
-                full_answer = ""
-                final_sources = []
-                
-                # Iterate over Server-Sent Events (SSE) stream
-                for line in response.iter_lines():
-                    if line:
-                        decoded_line = line.decode('utf-8')
-                        if decoded_line.startswith("data: "):
-                            data_str = decoded_line[6:]
-                            
-                            if data_str == "[DONE]":
-                                break
-                            
-                            try:
-                                data = json.loads(data_str)
-                                event_type = data.get("type")
-                                
-                                # Stream LLM Token
-                                if event_type == "token":
-                                    full_answer += data["content"]
-                                    answer_placeholder.markdown(full_answer + "▌")
-                                    
-                                # Receive final sources at the end
-                                elif event_type == "sources":
-                                    final_sources = data.get("content", [])
-                            except json.JSONDecodeError:
-                                continue
+                st.markdown(result.answer)
 
-                # Finalize answer display
-                answer_placeholder.markdown(full_answer)
+                # Render reflection logs
+                if result.reflection_logs:
+                    with st.expander("Self-RAG Agent Reflection Trace", expanded=False):
+                        for log in result.reflection_logs:
+                            st.markdown(log)
 
-                # Render sources expander
-                if final_sources:
+                # Render sources
+                if result.sources:
                     with st.expander("Retrieved Source Passages", expanded=False):
-                        for s in final_sources:
+                        for s in result.sources:
                             st.markdown(f"**{s['source']} (Page {s['page']})**")
                             st.markdown(f"> {s['snippet']}")
 
-                # Persist assistant turn in session
+                # Persist assistant turn
                 session_messages.append({
                     "role": "assistant",
-                    "content": full_answer,
-                    "reflections": [],
-                    "sources": final_sources
+                    "content": result.answer,
+                    "reflections": result.reflection_logs,
+                    "sources": result.sources
                 })
 
-            except requests.exceptions.ConnectionError:
-                st.error("Failed to connect to FastAPI backend. Is the server running? (`uvicorn api:app --reload`)")
             except Exception as e:
                 st.error(f"Error during execution: {str(e)}")
