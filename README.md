@@ -12,7 +12,7 @@ pinned: false
 
 **Live Demo:** [Hugging Face Spaces: Conversational_PDF_RAG](https://huggingface.co/spaces/Aryan2301/Conversational_PDF_RAG)
 
-An end-to-end **Self-Reflective Retrieval-Augmented Generation (Self-RAG)** conversational chatbot built with **LangGraph**, **Streamlit**, **Groq (Llama-3.3-70B)**, **ChromaDB**, and **Hugging Face embeddings**. This application enables users to upload multiple PDF documents and converse with their content through an autonomous, self-correcting agent state graph.
+An end-to-end **Self-Reflective Retrieval-Augmented Generation (Self-RAG)** conversational chatbot built with **LangGraph**, **Streamlit**, **Groq**, **ChromaDB**, and **Google Gemini Embeddings**. Upload multiple PDF documents and converse with their content through an autonomous, self-correcting agent state graph.
 
 The agent actively reflects on retrieved context relevance, transforms unhelpful queries, verifies generated answers against hallucinations, and evaluates answer quality before responding.
 
@@ -20,7 +20,7 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 
 ## Key Features
 
-* **Decoupled Architecture:** A lightweight Streamlit frontend client seamlessly streams Server-Sent Events (SSE) from a high-performance FastAPI backend.
+* **Unified Streamlit App:** Single-process architecture — Streamlit directly invokes the RAG pipeline with no separate backend needed.
 * **Self-RAG Architecture with LangGraph:** Autonomous state graph workflow featuring self-reflection, hallucination detection, and query transformation loops.
 * **Hybrid Retrieval (BM25 + Semantic Chroma):** Combines lexical keyword matching (BM25) and dense vector search (Chroma) fused via LangChain's native `EnsembleRetriever` using Reciprocal Rank Fusion (RRF).
 * **Fully Asynchronous Execution:** Entire graph is implemented with non-blocking async nodes (`ainvoke`) and concurrent evaluations (`asyncio.gather`) for parallel document grading and simultaneous hallucination/relevance verification.
@@ -42,7 +42,6 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 ## Tech Stack
 
 * **Orchestration & Workflow:** [LangGraph](https://github.com/langchain-ai/langgraph), [LangChain Core](https://github.com/langchain-ai/langchain)
-* **Backend API:** FastAPI, Uvicorn
 * **Frontend:** Streamlit
 * **LLM Provider:** Groq
 * **Hybrid Retrieval:** BM25 (`rank_bm25`), ChromaDB (`langchain-chroma`), LangChain `EnsembleRetriever`
@@ -93,7 +92,7 @@ graph TD
 
 ### Prerequisites
 
-* Python 3.11+
+* Python 3.12+
 * [Groq API Key](https://console.groq.com/keys)
 * [Google AI Studio API Key](https://aistudio.google.com/app/apikey) (for Gemini Embeddings)
 * [Hugging Face Token](https://huggingface.co/settings/tokens)
@@ -131,19 +130,13 @@ LANGCHAIN_PROJECT="PDF_RAG_CHATBOT"
    pip install -r requirements.txt
    ```
 
-2. **Start the FastAPI Backend (Terminal 1):**
-
-   ```bash
-   uvicorn api:app --reload --port 8000
-   ```
-
-3. **Start the Streamlit Frontend (Terminal 2):**
+2. **Run the app:**
 
    ```bash
    streamlit run app.py
    ```
 
-   The application will start locally on `http://localhost:8501` and connect to the backend API.
+   The application will start locally on `http://localhost:8501`.
 
 ### Option B: Docker Deployment
 
@@ -156,7 +149,7 @@ LANGCHAIN_PROJECT="PDF_RAG_CHATBOT"
 2. **Run the Docker container:**
 
    ```bash
-   docker run -p 8000:8000 -p 8501:8501 --env-file .env conversational-pdf-self-rag
+   docker run -p 7860:7860 --env-file .env conversational-pdf-self-rag
    ```
 
 ---
@@ -200,9 +193,9 @@ conversational-pdf-rag/
 │       ├── __init__.py
 │       └── helpers.py       # Hashing, citation formatting, safe async executor
 │
-├── app.py                   # Streamlit UI layer and state orchestration
+├── app.py                   # Streamlit app (UI + direct RAG pipeline execution)
 ├── requirements.txt         # Project dependencies (LangGraph, Groq, Chroma, Streamlit)
-├── Dockerfile               # Container configuration for deployment
+├── Dockerfile               # Docker configuration for HF Spaces deployment
 ├── .env                     # Environment variables (API keys)
 ├── .gitignore               # Git ignore rules
 └── README.md                # Project documentation and Self-RAG architecture diagram

@@ -7,9 +7,7 @@ from src.ui import render_chat_history, render_message_turn
 from src.core.service import RagService
 from src.ingestion.pipeline import ingest_documents
 
-# ---------------------------------------------------------
 # Page Setup & Validation
-# ---------------------------------------------------------
 st.set_page_config(
     page_title="Conversational PDF Self-RAG",
     layout="wide"
@@ -25,9 +23,7 @@ if not GROQ_API_KEY:
 if not GOOGLE_API_KEY:
     st.warning("Missing Google API Key. Please set GOOGLE_API_KEY in your .env file for native Google Gemini Embeddings.")
 
-# ---------------------------------------------------------
 # State Initialization
-# ---------------------------------------------------------
 if "messages_by_session" not in st.session_state:
     st.session_state.messages_by_session = {}
 
@@ -47,9 +43,7 @@ if session_id not in st.session_state.messages_by_session:
 
 session_messages = st.session_state.messages_by_session[session_id]
 
-# ---------------------------------------------------------
-# PDF Upload & Ingestion Pipeline (Direct)
-# ---------------------------------------------------------
+# PDF Upload & Ingestion Pipeline
 uploaded_files = st.file_uploader(
     "Upload PDF Documents",
     type=["pdf"],
@@ -72,9 +66,7 @@ if uploaded_files:
 
 st.divider()
 
-# ---------------------------------------------------------
-# Conversation View & Query Execution (Direct)
-# ---------------------------------------------------------
+# Conversation View & Query Execution
 render_chat_history(session_messages)
 
 user_query = st.chat_input("Ask a question about your PDF documents...")
