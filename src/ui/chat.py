@@ -16,12 +16,6 @@ def render_message_turn(
                 for log in reflections:
                     st.markdown(log)
 
-        if sources:
-            with st.expander("Retrieved Source Passages", expanded=False):
-                for s in sources:
-                    st.markdown(f"**{s['source']} (Page {s['page']})**")
-                    st.markdown(f"> {s['snippet']}")
-
 def render_chat_history(session_messages: List[Dict[str, Any]]):
     """Render all historical turns in the current session."""
     for msg in session_messages:

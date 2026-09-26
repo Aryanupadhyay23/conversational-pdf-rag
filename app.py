@@ -96,12 +96,6 @@ if user_query:
                         for log in result.reflection_logs:
                             st.markdown(log)
 
-                # Render sources
-                if result.sources:
-                    with st.expander("Retrieved Source Passages", expanded=False):
-                        for s in result.sources:
-                            st.markdown(f"**{s['source']} (Page {s['page']})**")
-                            st.markdown(f"> {s['snippet']}")
 
                 # Persist assistant turn
                 session_messages.append({
