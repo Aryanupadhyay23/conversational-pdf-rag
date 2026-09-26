@@ -18,7 +18,7 @@ from src.graph.prompts import (
     rag_prompt,
     transform_query_prompt
 )
-from src.config import MAX_RETRIES, get_llm, get_eval_llm
+from src.config import MAX_RETRIES, MAX_CHAT_HISTORY_MESSAGES, get_llm, get_eval_llm
 from src.utils.helpers import format_docs_to_context
 
 class SelfRagNodes:
@@ -51,8 +51,8 @@ class SelfRagNodes:
         messages = state["messages"]
         logs = list(state.get("reflection_logs", []))
 
-        # LangChain native message filtering for chat history (limited to last 20 messages)
-        chat_history = filter_messages(messages, include_types=["human", "ai"])[:-1][-20:]
+        # LangChain native message filtering for chat history (last 5 turns = 10 messages)
+        chat_history = filter_messages(messages, include_types=["human", "ai"])[:-1][-MAX_CHAT_HISTORY_MESSAGES:]
 
         if chat_history:
             try:
@@ -133,6 +133,7 @@ class SelfRagNodes:
 
         return {
             "standalone_query": new_query,
+            "generation": "",  # Clear prior generation so subsequent generate_answer doesn't double-increment loop_count
             "loop_count": loop_count,
             "reflection_logs": logs
         }
@@ -148,8 +149,8 @@ class SelfRagNodes:
         logs = list(state.get("reflection_logs", []))
 
         context_str = format_docs_to_context(docs)
-        # Limit chat history to the last 20 messages
-        chat_history = filter_messages(messages, include_types=["human", "ai"])[:-1][-20:]
+        # Limit chat history to the last 5 turns (10 messages)
+        chat_history = filter_messages(messages, include_types=["human", "ai"])[:-1][-MAX_CHAT_HISTORY_MESSAGES:]
 
         generation = await self.rag_chain.ainvoke({
             "context": context_str,

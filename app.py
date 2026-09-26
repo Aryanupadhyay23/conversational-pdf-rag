@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 
-from src.config import GROQ_API_KEY, GOOGLE_API_KEY
+from src.config import OLLAMA_API_KEY, GOOGLE_API_KEY
 from src.utils.helpers import compute_files_hash
 from src.ui import render_chat_history, render_message_turn
 from src.core.service import RagService
@@ -14,11 +14,10 @@ st.set_page_config(
 )
 
 st.title("Conversational PDF Self-RAG Chatbot")
-st.caption("Powered by LangGraph + Groq + ChromaDB")
+st.caption("Powered by LangGraph + Ollama Cloud (gpt-oss:120b) + ChromaDB")
 
-if not GROQ_API_KEY:
-    st.error("Missing Groq API Key. Please set GROQ_API_KEY in your .env file.")
-    st.stop()
+if not OLLAMA_API_KEY:
+    st.warning("Missing Ollama API Key. Please ensure OLLAMA_API_KEY is set in your .env file for Ollama Cloud access.")
 
 if not GOOGLE_API_KEY:
     st.warning("Missing Google API Key. Please set GOOGLE_API_KEY in your .env file for native Google Gemini Embeddings.")

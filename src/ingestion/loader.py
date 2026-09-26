@@ -4,9 +4,41 @@ import logging
 from typing import List, Sequence
 from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores.utils import filter_complex_metadata
 
 logger = logging.getLogger(__name__)
+
+def sanitize_doc_metadata(raw_metadata: dict, filename: str) -> dict:
+    """
+    Ensure all metadata values are primitive types (str, int, float, bool)
+    and guarantee that 'source_name' and 'page' are preserved accurately.
+    """
+    cleaned = {}
+    for k, v in raw_metadata.items():
+        if isinstance(v, (str, int, float, bool)):
+            cleaned[k] = v
+
+    # Explicitly guarantee source_name is always a string containing the filename
+    cleaned["source_name"] = str(filename)
+
+    # Safely resolve page number to integer (0-indexed)
+    page_val = raw_metadata.get("page")
+    if page_val is None:
+        page_val = raw_metadata.get("page_number")
+        if page_val is not None:
+            try:
+                page_val = int(page_val) - 1
+            except (ValueError, TypeError):
+                page_val = 0
+        else:
+            page_val = 0
+    else:
+        try:
+            page_val = int(page_val)
+        except (ValueError, TypeError):
+            page_val = 0
+
+    cleaned["page"] = max(0, page_val)
+    return cleaned
 
 def load_pdf_from_path(file_path: str, filename: str) -> List[Document]:
     # Extract documents from PDF using PyPDFLoader with fallback to pypdf.PdfReader
@@ -35,16 +67,10 @@ def load_pdf_from_path(file_path: str, filename: str) -> List[Document]:
         if not doc.page_content or not doc.page_content.strip():
             continue
 
-        doc.metadata["source_name"] = filename
-        if "page" not in doc.metadata:
-            if "page_number" in doc.metadata:
-                doc.metadata["page"] = doc.metadata["page_number"] - 1
-            else:
-                doc.metadata["page"] = 0
-
+        doc.metadata = sanitize_doc_metadata(doc.metadata, filename)
         valid_docs.append(doc)
 
-    return filter_complex_metadata(valid_docs)
+    return valid_docs
 
 def load_pdf_from_bytes(file_bytes: bytes, filename: str) -> List[Document]:
     # Persist uploaded PDF bytes to a temporary file and load

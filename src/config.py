@@ -1,12 +1,12 @@
 import os
 from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
 # Load environment variables
 load_dotenv()
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "").strip()
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL") or ("https://ollama.com" if OLLAMA_API_KEY else "http://localhost:11434")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
 
@@ -24,44 +24,52 @@ if LANGCHAIN_TRACING_V2 and LANGCHAIN_API_KEY:
     os.environ["LANGCHAIN_PROJECT"] = LANGCHAIN_PROJECT
 
 # Model configurations
-DEFAULT_LLM_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+DEFAULT_LLM_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:120b")
 GEMINI_EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
-EMBEDDING_DIMENSION = 768
+EMBEDDING_DIMENSION = int(os.environ.get("EMBEDDING_DIMENSION", "768"))
 
 # Self-RAG configurations (Optimized chunk size for high-precision retrieval)
 MAX_RETRIES = 2
 RETRIEVER_K = 5
 CHUNK_SIZE = 1000       # ~200-250 tokens: high semantic density for 768-dim embeddings
 CHUNK_OVERLAP = 200     # 20% overlap: preserves cross-chunk contextual continuity
+MAX_CHAT_HISTORY_TURNS = 5
+MAX_CHAT_HISTORY_MESSAGES = MAX_CHAT_HISTORY_TURNS * 2  # 5 turns = 10 messages (Human + AI)
 
 # Hybrid Retrieval configurations (EnsembleRetriever weights)
 BM25_WEIGHT = 0.5
 SEMANTIC_WEIGHT = 0.5
 
 def get_llm(temperature: float = 0.3) -> BaseChatModel:
-    """Return standard generation chat model initialized via LangChain's native init_chat_model."""
-    return init_chat_model(
-        DEFAULT_LLM_MODEL,
-        model_provider="groq",
-        api_key=GROQ_API_KEY,
+    """Return standard generation chat model backed by Ollama Cloud (gpt-oss:120b)."""
+    from langchain_ollama import ChatOllama
+    client_kwargs = {"headers": {"Authorization": f"Bearer {OLLAMA_API_KEY}"}} if OLLAMA_API_KEY else None
+    return ChatOllama(
+        model=DEFAULT_LLM_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        client_kwargs=client_kwargs,
         temperature=temperature
     )
 
 def get_eval_llm(temperature: float = 0.0) -> BaseChatModel:
-    """Return deterministic grading model initialized via LangChain's native init_chat_model."""
-    return init_chat_model(
-        DEFAULT_LLM_MODEL,
-        model_provider="groq",
-        api_key=GROQ_API_KEY,
+    """Return deterministic grading model backed by Ollama Cloud (gpt-oss:120b)."""
+    from langchain_ollama import ChatOllama
+    client_kwargs = {"headers": {"Authorization": f"Bearer {OLLAMA_API_KEY}"}} if OLLAMA_API_KEY else None
+    return ChatOllama(
+        model=DEFAULT_LLM_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        client_kwargs=client_kwargs,
         temperature=temperature
     )
 
 def get_embeddings():
-    """Return LangChain native Google Gemini embeddings model with 768 output dimensions."""
+    """Return LangChain native Google Gemini embeddings model with configured output dimensions."""
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
     api_key = GOOGLE_API_KEY or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    return GoogleGenerativeAIEmbeddings(
-        model=GEMINI_EMBEDDING_MODEL,
-        google_api_key=api_key,
-        output_dimensionality=EMBEDDING_DIMENSION
-    )
+    kwargs = {
+        "model": GEMINI_EMBEDDING_MODEL,
+        "google_api_key": api_key,
+    }
+    if EMBEDDING_DIMENSION:
+        kwargs["output_dimensionality"] = EMBEDDING_DIMENSION
+    return GoogleGenerativeAIEmbeddings(**kwargs)

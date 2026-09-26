@@ -47,6 +47,18 @@ class RagService:
         if self.retriever:
             self._compile_graph()
 
+    def clear_session_memory(self, session_id: str):
+        """Reset memory checkpoints for a specific session thread while keeping other sessions intact."""
+        if hasattr(self.checkpointer, "storage") and isinstance(self.checkpointer.storage, dict):
+            keys_to_delete = [
+                k for k in list(self.checkpointer.storage.keys())
+                if isinstance(k, tuple) and len(k) > 0 and k[0] == session_id
+            ]
+            for k in keys_to_delete:
+                del self.checkpointer.storage[k]
+        elif hasattr(self.checkpointer, "clear"):
+            self.clear_memory()
+
     def is_ready(self) -> bool:
         """Check if retriever and workflow are initialized."""
         return self.retriever is not None and self.rag_app is not None

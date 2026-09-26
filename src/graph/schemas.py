@@ -1,5 +1,17 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+def _normalize_binary(v) -> str:
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    if isinstance(v, (int, float)):
+        return "yes" if v == 1 else "no"
+    if isinstance(v, str):
+        clean = v.strip().lower()
+        if clean in ("yes", "y", "true", "1"):
+            return "yes"
+        return "no"
+    return "no"
 
 class DocumentRelevanceGrade(BaseModel):
     """Structured evaluation of document chunk relevance to the search query."""
@@ -10,6 +22,11 @@ class DocumentRelevanceGrade(BaseModel):
         description="Concise rationale explaining the grading decision."
     )
 
+    @field_validator("binary_score", mode="before")
+    @classmethod
+    def validate_binary_score(cls, v):
+        return _normalize_binary(v)
+
 class HallucinationGrade(BaseModel):
     """Structured evaluation of factual groundedness of an answer against reference context."""
     binary_score: Literal["yes", "no"] = Field(
@@ -19,6 +36,11 @@ class HallucinationGrade(BaseModel):
         description="Concise explanation of whether statements in the answer are grounded in context facts."
     )
 
+    @field_validator("binary_score", mode="before")
+    @classmethod
+    def validate_binary_score(cls, v):
+        return _normalize_binary(v)
+
 class AnswerRelevanceGrade(BaseModel):
     """Structured evaluation of whether the answer directly resolves the user question."""
     binary_score: Literal["yes", "no"] = Field(
@@ -27,6 +49,11 @@ class AnswerRelevanceGrade(BaseModel):
     reasoning: str = Field(
         description="Concise explanation of how well the answer addresses the user's inquiry."
     )
+
+    @field_validator("binary_score", mode="before")
+    @classmethod
+    def validate_binary_score(cls, v):
+        return _normalize_binary(v)
 
 class ReformulatedQuery(BaseModel):
     """Structured standalone search query contextualized using conversational history."""

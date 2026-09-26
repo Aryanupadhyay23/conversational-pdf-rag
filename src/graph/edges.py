@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from typing import Literal, Tuple
 
 from src.graph.state import GraphState
 from src.graph.schemas import HallucinationGrade, AnswerRelevanceGrade
 from src.graph.prompts import hallucination_prompt, answer_grade_prompt
 from src.config import MAX_RETRIES, get_eval_llm
+
+logger = logging.getLogger(__name__)
 
 class SelfRagEdges:
     """Encapsulates all async conditional edge functions using native structured output schemas."""
@@ -48,26 +51,42 @@ class SelfRagEdges:
             return "generate_fallback"
 
     async def _check_hallucination(self, context_str: str, generation: str) -> Tuple[bool, str]:
-        """Asynchronously evaluate factual groundedness against context using structured Pydantic output."""
-        try:
-            res: HallucinationGrade = await self.hallucination_chain.ainvoke({
-                "context": context_str,
-                "answer": generation
-            })
-            return (res.binary_score == "yes", res.reasoning)
-        except Exception:
-            return (True, "Groundedness confirmed by default.")
+        """
+        Asynchronously evaluate factual groundedness against context using structured Pydantic output.
+        Retries once on transient errors and logs any API/parsing failures explicitly.
+        """
+        for attempt in range(2):
+            try:
+                res: HallucinationGrade = await self.hallucination_chain.ainvoke({
+                    "context": context_str,
+                    "answer": generation
+                })
+                return (res.binary_score == "yes", res.reasoning)
+            except Exception as e:
+                logger.warning(f"Hallucination evaluation attempt {attempt + 1} failed: {e}")
+                if attempt == 1:
+                    logger.error(f"Hallucination evaluation failed after retry: {e}", exc_info=True)
+                    return (True, f"Evaluation bypassed due to API error: {str(e)[:120]}")
+        return (True, "Evaluation bypassed.")
 
     async def _check_answer_relevance(self, question: str, generation: str) -> Tuple[bool, str]:
-        """Asynchronously evaluate whether the generation directly addresses the user question using structured Pydantic output."""
-        try:
-            res: AnswerRelevanceGrade = await self.answer_grade_chain.ainvoke({
-                "question": question,
-                "answer": generation
-            })
-            return (res.binary_score == "yes", res.reasoning)
-        except Exception:
-            return (True, "Answer relevance confirmed by default.")
+        """
+        Asynchronously evaluate whether the generation directly addresses the user question.
+        Retries once on transient errors and logs any API/parsing failures explicitly.
+        """
+        for attempt in range(2):
+            try:
+                res: AnswerRelevanceGrade = await self.answer_grade_chain.ainvoke({
+                    "question": question,
+                    "answer": generation
+                })
+                return (res.binary_score == "yes", res.reasoning)
+            except Exception as e:
+                logger.warning(f"Answer relevance evaluation attempt {attempt + 1} failed: {e}")
+                if attempt == 1:
+                    logger.error(f"Answer relevance evaluation failed after retry: {e}", exc_info=True)
+                    return (True, f"Evaluation bypassed due to API error: {str(e)[:120]}")
+        return (True, "Evaluation bypassed.")
 
     async def grade_generation(
         self,
@@ -97,7 +116,9 @@ class SelfRagEdges:
             self._check_answer_relevance(question, generation)
         )
 
-        if not is_grounded:
+        if "bypassed due to API error" in h_reason:
+            logs.append(f"[Hallucination Check Warning] Groundedness verification unavailable due to API issue: {h_reason}")
+        elif not is_grounded:
             if loop_count < MAX_RETRIES:
                 logs.append(f"[Hallucination Detection (Retry {loop_count + 1}/{MAX_RETRIES})] Response not fully grounded: {h_reason}. Regenerating answer.")
                 state["reflection_logs"] = logs
@@ -107,7 +128,9 @@ class SelfRagEdges:
         else:
             logs.append(f"[Hallucination Check] Grounded in facts: {h_reason}")
 
-        if not is_relevant:
+        if "bypassed due to API error" in a_reason:
+            logs.append(f"[Answer Quality Warning] Relevance verification unavailable due to API issue: {a_reason}")
+        elif not is_relevant:
             if loop_count < MAX_RETRIES:
                 logs.append(f"[Answer Quality Check (Retry {loop_count + 1}/{MAX_RETRIES})] Incomplete fulfillment: {a_reason}. Retrying with transformed query.")
                 state["reflection_logs"] = logs
