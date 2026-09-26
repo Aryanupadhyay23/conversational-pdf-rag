@@ -3,11 +3,13 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (required by unstructured PDF loader)
 RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     g++ \
+    libmagic-dev \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
