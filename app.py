@@ -2,13 +2,14 @@ import streamlit as st
 import requests
 import json
 import uuid
+import os
 
 from src.config import GROQ_API_KEY, GOOGLE_API_KEY
 from src.utils.helpers import compute_files_hash
 from src.ui import render_chat_history, render_message_turn
 
 # FastAPI Backend Configuration
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------
 # Page Setup & Validation

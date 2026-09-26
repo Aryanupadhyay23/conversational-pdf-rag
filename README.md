@@ -1,3 +1,13 @@
+---
+title: Conversational PDF RAG
+emoji: 📄
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Conversational PDF Self-RAG Chatbot
 
 **Live Demo:** [Hugging Face Spaces: Conversational_PDF_RAG](https://huggingface.co/spaces/Aryan2301/Conversational_PDF_RAG)

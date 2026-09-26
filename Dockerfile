@@ -22,12 +22,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
-# Expose FastAPI and Streamlit ports
-EXPOSE 8000 8501
+# Expose the single port HF Spaces expects (7860)
+EXPOSE 7860
 
-# Streamlit configuration
-ENV STREAMLIT_SERVER_PORT=8501
+# Streamlit configuration — must use port 7860 for HF Spaces
+ENV STREAMLIT_SERVER_PORT=7860
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV STREAMLIT_SERVER_HEADLESS=true
+ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
-# Start both FastAPI backend and Streamlit frontend
-CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port 8000 & streamlit run app.py"]
+# Start FastAPI on internal port 8000, then Streamlit on 7860
+CMD ["sh", "-c", "uvicorn api:app --host 127.0.0.1 --port 8000 & streamlit run app.py --server.port 7860 --server.address 0.0.0.0"]
