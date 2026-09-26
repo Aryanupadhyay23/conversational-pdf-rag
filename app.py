@@ -90,11 +90,6 @@ if user_query:
 
                 st.markdown(result.answer)
 
-                # Render reflection logs
-                if result.reflection_logs:
-                    with st.expander("Self-RAG Agent Reflection Trace", expanded=False):
-                        for log in result.reflection_logs:
-                            st.markdown(log)
 
 
                 # Persist assistant turn

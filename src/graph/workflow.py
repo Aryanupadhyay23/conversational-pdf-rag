@@ -31,6 +31,7 @@ def build_self_rag_graph(
     workflow = StateGraph(GraphState)
 
     # Register Nodes
+    workflow.add_node("handle_chit_chat", nodes.handle_chit_chat)
     workflow.add_node("reformulate_query", nodes.reformulate_query)
     workflow.add_node("retrieve_documents", nodes.retrieve_documents)
     workflow.add_node("grade_documents", nodes.grade_documents)
@@ -39,8 +40,16 @@ def build_self_rag_graph(
     workflow.add_node("generate_fallback", nodes.generate_fallback)
     workflow.add_node("finalize_response", nodes.finalize_response)
 
-    # Standard Edges
-    workflow.add_edge(START, "reformulate_query")
+    # Initial routing (chit-chat bypasses retrieval)
+    workflow.add_conditional_edges(
+        START,
+        edges.route_query,
+        {
+            "handle_chit_chat": "handle_chit_chat",
+            "reformulate_query": "reformulate_query"
+        }
+    )
+    workflow.add_edge("handle_chit_chat", "finalize_response")
     workflow.add_edge("reformulate_query", "retrieve_documents")
     workflow.add_edge("retrieve_documents", "grade_documents")
 

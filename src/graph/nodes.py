@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage, filter_messages
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from src.graph.state import GraphState
 from src.graph.schemas import (
@@ -167,15 +168,48 @@ class SelfRagNodes:
             "reflection_logs": logs
         }
 
+    async def handle_chit_chat(self, state: GraphState) -> dict:
+        # Handle general greetings and conversational chit-chat directly
+        question = state["question"]
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are a warm, helpful AI assistant specializing in answering questions about uploaded PDF documents. Reply politely and warmly to the user's greeting or remark, and invite them to ask any questions about the documents they have uploaded. Keep your reply concise (1-2 sentences)."),
+            ("human", "{question}")
+        ])
+        chain = prompt | self.llm | StrOutputParser()
+        try:
+            reply = await chain.ainvoke({"question": question})
+        except Exception:
+            reply = "Hello! I am ready to help you with your uploaded PDF documents. What would you like to know?"
+
+        return {
+            "generation": reply,
+            "documents": [],
+            "reflection_logs": ["[Conversational] Handled greeting directly."]
+        }
+
     async def generate_fallback(self, state: GraphState) -> dict:
-        """Fallback message when no relevant context could be retrieved."""
+        # Gracefully handle queries where no document passages matched
+        question = state["question"]
         logs = list(state.get("reflection_logs", []))
-        fallback_text = (
-            "I could not find sufficient relevant information in the uploaded PDF document(s) "
-            "to answer your question accurately. Please check if the topic is covered in your documents "
-            "or try rephrasing your question."
-        )
-        logs.append("[Fallback Triggered] No relevant context found after maximum query transformations.")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", (
+                "You are an AI assistant for uploaded PDF documents. No matching passages were found in the uploaded documents for the user's message.\n"
+                "- If the user's message is a greeting, polite pleasantry, or conversational question, respond warmly and invite them to ask about their documents.\n"
+                "- Otherwise, politely inform the user that the uploaded documents do not contain information on this topic and invite them to ask a question related to their documents.\n"
+                "Keep your reply friendly and concise."
+            )),
+            ("human", "{question}")
+        ])
+        chain = prompt | self.llm | StrOutputParser()
+        try:
+            fallback_text = await chain.ainvoke({"question": question})
+        except Exception:
+            fallback_text = (
+                "I could not find relevant information in the uploaded PDF document(s) "
+                "to answer your question. Please feel free to ask a question related to your documents or try rephrasing."
+            )
+        logs.append("[Fallback Triggered] Generated contextual fallback response.")
         return {"generation": fallback_text, "reflection_logs": logs}
 
     async def finalize_response(self, state: GraphState) -> dict:

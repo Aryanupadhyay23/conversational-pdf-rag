@@ -17,6 +17,22 @@ class SelfRagEdges:
         self.answer_grade_chain = answer_grade_prompt | self.eval_llm.with_structured_output(AnswerRelevanceGrade)
 
     @staticmethod
+    def route_query(state: GraphState) -> Literal["handle_chit_chat", "reformulate_query"]:
+        # Route greetings and conversational pleasantries directly
+        import re
+        q = state.get("question", "").strip().lower()
+        cleaned = re.sub(r"[^\w\s]", "", q)
+        greetings = {
+            "hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon",
+            "good evening", "how are you", "how are you doing", "what is your name",
+            "who are you", "what can you do", "help", "thanks", "thank you", "bye", "goodbye",
+            "hey there", "hello there", "hi there", "sup", "yo"
+        }
+        if cleaned in greetings or (cleaned.startswith(("hi ", "hello ", "hey ")) and len(cleaned.split()) <= 3):
+            return "handle_chit_chat"
+        return "reformulate_query"
+
+    @staticmethod
     def decide_to_generate(
         state: GraphState
     ) -> Literal["generate_answer", "transform_query", "generate_fallback"]:

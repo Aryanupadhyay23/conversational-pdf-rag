@@ -11,11 +11,6 @@ def render_message_turn(
     with st.chat_message(role):
         st.markdown(content)
 
-        if reflections:
-            with st.expander("Self-RAG Agent Reflection Trace", expanded=False):
-                for log in reflections:
-                    st.markdown(log)
-
 def render_chat_history(session_messages: List[Dict[str, Any]]):
     """Render all historical turns in the current session."""
     for msg in session_messages:
