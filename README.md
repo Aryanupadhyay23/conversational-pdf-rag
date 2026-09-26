@@ -152,6 +152,20 @@ LANGCHAIN_PROJECT="PDF_RAG_CHATBOT"
    docker run -p 7860:7860 --env-file .env conversational-pdf-self-rag
    ```
 
+### Option C: Hugging Face Spaces Deployment
+
+1. **Configure Space Secrets** in your Space Settings:
+   - `GROQ_API_KEY`
+   - `GOOGLE_API_KEY`
+   - `HF_TOKEN` (optional)
+   - `LANGCHAIN_API_KEY` (optional)
+
+2. **Deploy to both GitHub and Hugging Face Spaces with one command:**
+
+   ```bash
+   git add . ; git commit -m "Update" ; git push origin master ; git push pdf-rag master:main --force
+   ```
+
 ---
 
 ## Project Structure
