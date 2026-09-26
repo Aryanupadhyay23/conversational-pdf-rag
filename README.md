@@ -21,6 +21,7 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 ## Key Features
 
 * **Unified Streamlit App:** Single-process architecture — Streamlit directly invokes the RAG pipeline with no separate backend needed.
+* **Conversational Intent Router:** Distinguishes general greetings and chit-chat from document questions, replying warmly and instantly without redundant document searches.
 * **Self-RAG Architecture with LangGraph:** Autonomous state graph workflow featuring self-reflection, hallucination detection, and query transformation loops.
 * **Hybrid Retrieval (BM25 + Semantic Chroma):** Combines lexical keyword matching (BM25) and dense vector search (Chroma) fused via LangChain's native `EnsembleRetriever` using Reciprocal Rank Fusion (RRF).
 * **Fully Asynchronous Execution:** Entire graph is implemented with non-blocking async nodes (`ainvoke`) and concurrent evaluations (`asyncio.gather`) for parallel document grading and simultaneous hallucination/relevance verification.
@@ -29,11 +30,10 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 * **Dynamic Query Transformation:** Automatically rewrites the query using memory context and retries retrieval if initial documents are insufficient or irrelevant.
 * **Hallucination & Faithfulness Guard:** Evaluates if generated responses are factually grounded in the provided document context.
 * **Answer Quality Assessment:** Checks that the final answer directly and comprehensively addresses the user's inquiry.
-* **Interactive Reflection Trace:** Real-time visibility into the Self-RAG decision process in Streamlit.
-* **Source Passages & Citations:** Expandable view of retrieved document snippets with source file names and page references.
+* **Clean Conversational UI:** Distraction-free chat experience with clean message streams.
 * **Smart Ingestion Caching:** Vectorstore indexing is cached so PDFs are only processed once per upload batch, eliminating rerun latency.
 * **High-Performance LLM:** Powered by Groq's high-throughput LLM models.
-* **Parallel Multi-PDF Processing:** Concurrent multi-threaded document parsing for massive speedups when uploading multiple files.
+* **Document Parsing via `pypdf`:** Pure-Python, lightweight, and robust PDF parsing with automatic fallback.
 * **Observability with LangSmith:** Full execution tracing out-of-the-box to visualize the agent's graph operations, chunk retrievals, and evaluation steps.
 * **Docker Ready:** Fully containerized for easy and consistent deployments.
 
@@ -55,7 +55,12 @@ The agent actively reflects on retrieved context relevance, transforms unhelpful
 
 ```mermaid
 graph TD
-    Start([User Input]) --> Reformulate[Node: reformulate_query]
+    Start([User Input]) --> Router{Is Greeting / Chit-Chat?}
+    Router -->|Yes| ChitChat[Node: handle_chit_chat]
+    Router -->|No| Reformulate[Node: reformulate_query]
+    
+    ChitChat --> FinalOutput[Node: finalize_response]
+    
     Reformulate --> Retrieve[Node: retrieve_documents]
     Retrieve --> GradeDocs[Node: grade_documents]
     
@@ -69,22 +74,23 @@ graph TD
     Generate --> GradeGeneration{Self-Reflection on Answer}
     GradeGeneration -->|Hallucination Detected & Retry Available| Generate
     GradeGeneration -->|Not Useful & Retry Available| TransformQuery
-    GradeGeneration -->|Grounded & Useful| FinalOutput[Node: finalize_response]
+    GradeGeneration -->|Grounded & Useful| FinalOutput
     GenerateFallback --> FinalOutput
     
     FinalOutput --> End([Stream Response to UI & Save State])
 ```
 
 ### Step-by-Step Flow:
-1. **Query Reformulation:** If prior chat history exists, reformulates follow-up queries into standalone search questions.
-2. **Retrieval:** Fetches candidate chunks from the Chroma vector store.
-3. **Document Relevance Grading:** Evaluates whether each chunk is relevant to the question; filters out noise.
-4. **Adaptive Routing:** If no relevant documents are found, rewrites the search query and searches again (up to max retries). If max retries are exceeded, executes a graceful fallback.
-5. **Contextual Generation:** Generates the candidate answer strictly using grounded context chunks and conversational context.
-6. **Hallucination & Relevance Reflection:**
+1. **Conversational Intent Routing:** Analyzes incoming message. Greetings and pleasantries bypass document retrieval and are answered directly with a warm welcome.
+2. **Query Reformulation:** If prior chat history exists, reformulates follow-up document queries into standalone search questions.
+3. **Retrieval:** Fetches candidate chunks from the hybrid BM25 + Chroma vector store.
+4. **Document Relevance Grading:** Evaluates whether each chunk is relevant to the question; filters out noise.
+5. **Adaptive Routing:** If no relevant documents are found, rewrites the search query and searches again (up to max retries). If max retries are exceeded, executes an intelligent contextual fallback.
+6. **Contextual Generation:** Generates the candidate answer strictly using grounded context chunks and conversational context.
+7. **Hallucination & Relevance Reflection:**
    - **Groundedness Check:** Confirms the answer contains no hallucinations.
    - **Answer Relevance Check:** Confirms the answer addresses the user's prompt.
-7. **Finalization:** Updates the state graph checkpointer thread and displays the answer with full reflection telemetry and source citations.
+8. **Finalization:** Updates the state graph checkpointer thread and displays the clean answer to the user.
 
 ---
 
